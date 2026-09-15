@@ -104,18 +104,11 @@ export function populateAll<
 function recursiveComponentPopulate(
   component: UID.Component,
   options: PopulateOptions
-): { populate?: PopulateRule; fields?: string[] } {
+): { populate?: PopulateRule } {
   const componentSchema = strapi.components[component]
-  // Include all fields cannot be populated
-  const possibleFields = keys(componentSchema.attributes).filter(
-    (attr) =>
-      !['media', 'relation', 'component', 'dynamiczone'].includes(
-        componentSchema.attributes[attr].type
-      )
-  )
-  const fields = possibleFields.length > 0 ? possibleFields : undefined
-  if (options.maxDepth == 0) {
-    return { fields }
+
+  if (options.maxDepth === 0) {
+    return {}
   }
-  return { populate: populateAll(componentSchema, options), fields }
+  return { populate: populateAll(componentSchema, options) }
 }

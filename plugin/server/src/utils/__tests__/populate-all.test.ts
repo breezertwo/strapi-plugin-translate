@@ -1,4 +1,5 @@
 import { describe, expect, it, afterEach, beforeEach } from '@jest/globals'
+import { validate } from '@strapi/utils'
 import {
   simpleComponent,
   nestedComponent,
@@ -27,6 +28,27 @@ describe('populate all', () => {
       await setup({
         components: {
           simple: simpleComponent,
+          'private.component': {
+            ...simpleComponent,
+            attributes: {
+              ...simpleComponent.attributes,
+              private_label: {
+                type: 'string',
+                private: true,
+                required: true,
+                pluginOptions: { translate: { translate: 'copy' } },
+              },
+            },
+          },
+          'private-wrapper.component': {
+            attributes: {
+              nested: {
+                type: 'component',
+                component: 'private.component',
+                repeatable: true,
+              },
+            },
+          },
           'two-field': twoFieldComponent,
           'nested.component': nestedComponent,
           'with-relation': createComponentWithRelation(
@@ -125,7 +147,7 @@ describe('populate all', () => {
     const population = populateAll(schema)
 
     // then
-    expect(population).toEqual({ component: { fields: ['text'] } })
+    expect(population).toEqual({ component: {} })
   })
 
   it('content type with repeatable component populate all', () => {
@@ -136,7 +158,7 @@ describe('populate all', () => {
     const population = populateAll(schema)
 
     // then
-    expect(population).toEqual({ component: { fields: ['text'] } })
+    expect(population).toEqual({ component: {} })
   })
 
   it('content type with dynamic zone populate all', () => {
@@ -150,8 +172,8 @@ describe('populate all', () => {
     expect(population).toEqual({
       dynamic_zone: {
         on: {
-          simple: { fields: ['text'] },
-          'two-field': { fields: ['title', 'number'] },
+          simple: {},
+          'two-field': {},
         },
       },
     })
@@ -168,7 +190,7 @@ describe('populate all', () => {
     expect(population).toEqual({
       dynamic_zone: {
         on: {
-          simple: { fields: ['text'] },
+          simple: {},
           'with-relation': { populate: { related: { fields: ['id'] } } },
         },
       },
@@ -184,8 +206,45 @@ describe('populate all', () => {
 
     // then
     expect(population).toEqual({
-      nested: { fields: ['text'], populate: { nested: { fields: ['text'] } } },
+      nested: { populate: { nested: {} } },
     })
+  })
+
+  it.each([
+    ['component', createContentTypeWithComponent('private.component', {})],
+    [
+      'repeatable component',
+      createContentTypeWithComponent('private.component', { repeatable: true }),
+    ],
+    [
+      'dynamic zone',
+      createContentTypeWithDynamicZone(['private.component'], {}),
+    ],
+    [
+      'nested component in a dynamic zone',
+      createContentTypeWithDynamicZone(['private-wrapper.component'], {}),
+    ],
+  ])('allows required private fields in a %s', async (_name, schema) => {
+    const population = populateAll(schema)
+
+    await expect(
+      validate.validators.defaultValidatePopulate(
+        { schema, getModel: (uid) => strapi.components[uid] },
+        population
+      )
+    ).resolves.toBeDefined()
+  })
+
+  it('allows private fields at the component depth limit', async () => {
+    const schema = createContentTypeWithDynamicZone(['private.component'], {})
+    const population = populateAll(schema, { maxDepth: 1 })
+
+    await expect(
+      validate.validators.defaultValidatePopulate(
+        { schema, getModel: (uid) => strapi.components[uid] },
+        population
+      )
+    ).resolves.toBeDefined()
   })
 
   it('media is fully populated if requested', () => {
